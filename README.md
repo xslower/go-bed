@@ -24,3 +24,4 @@ if u want partition your table, see example model.go in test directory
 
 CRUD
 see example in test directory
+
