@@ -6,10 +6,15 @@ and orm just support mysql now.
 
 todo list:
 [cache] cache support
+
 [orm] auto cache data for db select.
+
 [model] distribute strategy then the orm will support distributed database and cache
+
 [orm] relate table search
+
 [router] router and dispatcher
+
 [view] support bootstrap and jquery
 
 orm usage:
