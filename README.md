@@ -1,4 +1,4 @@
-# GreenteaGo
+# GoORM
 a high performance and lack use reflect and assertion golang framework.
 now there is only have orm
 orm just support normal CRUD and table partition
