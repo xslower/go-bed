@@ -4,8 +4,7 @@
 package orm
 
 import (
-// "strings"
-
+	"strings"
 )
 
 var (
@@ -48,53 +47,75 @@ func (this *MysqlBuilder) Select(fields IFields, condition ICondition, appends I
 	ftn := fullTableName(this.db, this.table)
 	fldStr := `*`
 	if fields != nil {
-		fldStr = fields.GetSql()
+		fldStr = strings.Trim(fields.GetSql(), ` `)
+		if fldStr == `` {
+			fldStr = `*`
+		}
 	}
-	condStr := ``
-	if condition != nil {
-		condStr = ` WHERE ` + condition.GetSql()
-	}
+	condStr := this.getCondStr(condition)
 
-	sql := `SELECT ` + fldStr + ` FROM ` + ftn + condStr
+	appendStr := ``
+	if appends != nil {
+		appendStr = appends.GetSql()
+	}
+	sql := `SELECT ` + fldStr + ` FROM ` + ftn + condStr + ` ` + appendStr
 	return sql
 }
 
+func (this *MysqlBuilder) getFieldWriteStr(fields IFields) string {
+	if fields == nil {
+		panic(`the [fields] is nil`)
+	}
+	str := strings.Trim(fields.GetSql(), ` `)
+	if str == `` {
+		panic(`the [fields] is empty`)
+	}
+	return str
+}
+
+func (this *MysqlBuilder) getCondStr(cond ICondition) string {
+	if cond == nil {
+		return ``
+	}
+	str := strings.Trim(cond.GetSql(), ` `)
+	if str != `` {
+		str = ` WHERE ` + str
+	}
+	return str
+}
+
 func (this *MysqlBuilder) MultiInsert(fields IFields) string {
+	fldStr := this.getFieldWriteStr(fields)
 	ftn := fullTableName(this.db, this.table)
-	sql := `INSERT ` + ftn + ` ` + fields.GetSql()
+	sql := `INSERT ` + ftn + ` ` + fldStr
 	return sql
 }
 
 func (this *MysqlBuilder) Insert(fields IFields) string {
+	fldStr := this.getFieldWriteStr(fields)
 	ftn := fullTableName(this.db, this.table)
-	sql := `INSERT ` + ftn + ` SET ` + fields.GetSql()
+	sql := `INSERT ` + ftn + ` SET ` + fldStr
 	return sql
 }
 
 func (this *MysqlBuilder) InsertOrUpdate(fields IFields) string {
+	fldStr := this.getFieldWriteStr(fields)
 	ftn := fullTableName(this.db, this.table)
-	fldStr := fields.GetSql()
 	sql := `INSERT ` + ftn + ` SET ` + fldStr + ` ON DUPLICATE KEY UPDATE ` + fldStr
 	return sql
 }
 
 func (this *MysqlBuilder) Update(fields IFields, condition ICondition) string {
+	fldStr := this.getFieldWriteStr(fields)
 	ftn := fullTableName(this.db, this.table)
-	condStr := ``
-	if condition != nil {
-		condStr += ` WHERE ` + condition.GetSql()
-	}
-	sql := `UPDATE ` + ftn + ` SET ` + fields.GetSql() + condStr
+	condStr := this.getCondStr(condition)
+	sql := `UPDATE ` + ftn + ` SET ` + fldStr + condStr
 	return sql
 }
 
 func (this *MysqlBuilder) Delete(condition ICondition) string {
-
 	ftn := fullTableName(this.db, this.table)
-	condStr := ``
-	if condition != nil {
-		condStr += ` WHERE ` + condition.GetSql()
-	}
+	condStr := this.getCondStr(condition)
 	sql := `DELETE FROM ` + ftn + condStr
 	return sql
 }
@@ -107,7 +128,7 @@ func ShowColumns(db, table string) string {
 func fullTableName(db, table string) string {
 	table = "`" + table + "`"
 	if db != `` {
-		db = "`" + db + "`"
+		db = "`" + db + "`."
 	}
-	return db + "." + table
+	return db + table
 }

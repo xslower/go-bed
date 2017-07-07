@@ -29,31 +29,29 @@ func NewCondsOr() *Condition {
 	return c
 }
 
-func NewCondsWithMap(condMap map[string]interface{}) *Condition {
-	c := NewConds()
-	for key, val := range condMap {
-		c.exprs = append(c.exprs, &ExprEqual{key, val})
-	}
-	return c
-}
-
-func NewCondsWithSlice(columns []string, values []interface{}) *Condition {
-	c := NewConds()
-	if len(columns) == len(values) {
-		for i, clm := range columns {
-			c.exprs = append(c.exprs, &ExprEqual{clm, values[i]})
-		}
-	} else {
-		panic(`given values number is not match columns number`)
-	}
-	return c
-}
-
 type Condition struct {
 	rel     string
 	exprs   []ISubExpr
 	conds   []ICondition
 	prepare bool
+}
+
+func (this *Condition) InitWithMap(condMap map[string]interface{}) *Condition {
+	for key, val := range condMap {
+		this.exprs = append(this.exprs, &ExprEqual{key, val})
+	}
+	return this
+}
+
+func (this *Condition) InitWithSlice(columns []string, values []interface{}) *Condition {
+	if len(columns) == len(values) {
+		for i, clm := range columns {
+			this.exprs = append(this.exprs, &ExprEqual{clm, values[i]})
+		}
+	} else {
+		panic(`given values number is not match columns number`)
+	}
+	return this
 }
 
 func (this *Condition) AddConds(c ICondition) *Condition {
@@ -92,9 +90,9 @@ func (this *Condition) GetSql() string {
 		exprSlice = append(exprSlice, expr.Sql(this.prepare))
 	}
 	for _, cond := range this.conds {
-		exprSlice = append(exprSlice, cond.GetSql())
+		exprSlice = append(exprSlice, `(`+cond.GetSql()+`)`)
 	}
-	sql := `(` + strings.Join(exprSlice, ` `+this.rel+` `) + `)`
+	sql := strings.Join(exprSlice, ` `+this.rel+` `)
 	return sql
 }
 

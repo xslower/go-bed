@@ -53,7 +53,6 @@ func (this *Conn) Query(query string, args ...interface{}) (columns []string, rr
 	throw(err)
 	//var rrows []RawRow
 	columns, _ = rows.Columns()
-	throw(err)
 	num := len(columns)
 	for rows.Next() {
 		rr := make([][]byte, num)

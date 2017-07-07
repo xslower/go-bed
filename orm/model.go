@@ -110,7 +110,7 @@ func RegisterModel(model interface{}) {
 type IModel interface {
 	DbName() string
 	TableName(elems ...ISqlElem) string
-	PartitionKey() string //分表的字段，如果没有则返回空
+	PartitionKey() []string //分表的字段，如果没有则返回空
 	CreateRow() IRow
 	ResetResult()
 }
@@ -134,70 +134,105 @@ func (this *BaseModel) TableName(elems ...ISqlElem) string {
 	return this.IModel.TableName(elems...)
 }
 
-func (this *BaseModel) PartitionKey() string {
+func (this *BaseModel) PartitionKey() []string {
 	return this.IModel.PartitionKey()
 }
 
 func (this *BaseModel) Insert(fields IFields) int {
+	if fields == nil {
+		panic(`fields is nil, expect IFields`)
+	}
 	sb := fNewSqlBuilder(this.DbName(), this.TableName(fields))
 	this.filterColumn(fields)
 	sql := sb.Insert(fields)
 	values := fields.Values()
-	id := gDbConn.Exec(sql, values...)
 	this.lastSql = sql
+	id := gDbConn.Exec(sql, values...)
 	return id
 }
 
 func (this *BaseModel) InsertOrUpdate(fields IFields) int {
+	if fields == nil {
+		panic(`fields is nil, expect IFields`)
+	}
 	sb := fNewSqlBuilder(this.DbName(), this.TableName(fields))
 	this.filterColumn(fields)
 	sql := sb.InsertOrUpdate(fields)
 	values := fields.Values()
 	values = append(values, values...) //这里insert和update需要两套值
-	id := gDbConn.Exec(sql, values...)
 	this.lastSql = sql
+	id := gDbConn.Exec(sql, values...)
 	return id
 }
 
-func (this *BaseModel) MultiInsert(fields IFields) {
+func (this *BaseModel) MultiInsert(fields IFields) int {
+	if fields == nil {
+		panic(`fields is nil, expect IFields`)
+	}
 	sb := fNewSqlBuilder(this.DbName(), this.TableName(fields))
-	this.filterColumn(fields)
+	// this.filterColumn(fields)
 	sql := sb.MultiInsert(fields)
 	values := fields.Values()
-	gDbConn.Exec(sql, values...)
 	this.lastSql = sql
+	id := gDbConn.Exec(sql, values...)
+	return id
 }
 
 func (this *BaseModel) Delete(condition ICondition) int {
+	if condition == nil {
+		panic(`condition is nil, expect ICondition`)
+	}
 	sb := fNewSqlBuilder(this.DbName(), this.TableName(condition))
 	this.filterColumn(condition)
+	if len(condition.Columns()) == 0 {
+		panic(`do not allow update table without any condition!`)
+	}
 	sql := sb.Delete(condition)
 	values := condition.Values()
-	num := gDbConn.Exec(sql, values...)
 	this.lastSql = sql
+	num := gDbConn.Exec(sql, values...)
 	return num
 }
 
 func (this *BaseModel) Update(fields IFields, condition ICondition) int {
+	if fields == nil {
+		panic(`fields is nil, expect IFields`)
+	}
+	if condition == nil { //patch update table is a dangerous action
+		panic(`condition is nil, expect ICondition`)
+	}
 	sb := fNewSqlBuilder(this.DbName(), this.TableName(condition))
 	this.filterColumn(fields)
 	this.filterColumn(condition)
+	if len(condition.Columns()) == 0 {
+		panic(`do not allow update table without any condition!`)
+	}
 	sql := sb.Update(fields, condition)
 	// echo(fields.Values())
 	// echo(condition.Values())
 	values := append(fields.Values(), condition.Values()...)
-	num := gDbConn.Exec(sql, values...)
 	this.lastSql = sql
+	num := gDbConn.Exec(sql, values...)
 	return num
 }
 
-func (this *BaseModel) Select(fields IFields, condition ICondition, appends IAppends) bool {
+func (this *BaseModel) Select(condition ICondition, appends IAppends, fields IFields) bool {
+	if condition == nil {
+		condition = NewConds()
+	}
+	if appends == nil {
+		appends = NewAppends()
+	}
+	if fields == nil {
+		fields = NewFieldsRead()
+	}
 	sb := fNewSqlBuilder(this.DbName(), this.TableName(condition))
 	this.filterColumn(fields)
 	this.filterColumn(condition)
 	sql := sb.Select(fields, condition, appends)
-	values := append(fields.Values(), condition.Values()...)
-	values = append(values, appends.Values()...)
+	// values := append(fields.Values(), condition.Values()...)
+	values := append(condition.Values(), appends.Values()...)
+	this.lastSql = sql
 	columns, rrows := gDbConn.Query(sql, values...)
 	this.IModel.ResetResult()
 	// irowSlice := []IRow{}
@@ -211,17 +246,18 @@ func (this *BaseModel) Select(fields IFields, condition ICondition, appends IApp
 	return true
 }
 
-func (this *BaseModel) ObjRead(irow IRow) bool {
-	ti := this.getTableInfo()
-	pks := ti.primaryKey
-	// condMap := map[string]interface{}{}
-	condVal := this.getRowValues(&pks, irow, false)
-	iConds := NewCondsWithSlice(pks, condVal)
+func (this *BaseModel) Read(irow IRow) bool {
+	if irow == nil {
+		return false
+	}
+	iConds := this.IRowToConds(irow)
 	sb := fNewSqlBuilder(this.DbName(), this.TableName(iConds))
-	this.filterColumn(iConds)
+	this.filterColumn(iConds) //有些model中的分表字段可能不在表中
 	iApds := NewAppends().Limit(0, 1)
+	values := append(iConds.Values(), iApds.Values()...)
 	sql := sb.Select(nil, iConds, iApds)
-	columns, rrows := gDbConn.Query(sql, iConds.Values()...)
+	this.lastSql = sql
+	columns, rrows := gDbConn.Query(sql, values...)
 	if len(rrows) > 0 {
 		for i, clm := range columns {
 			irow.Set(clm, rrows[0][i])
@@ -231,60 +267,105 @@ func (this *BaseModel) ObjRead(irow IRow) bool {
 	return false
 }
 
-func (this *BaseModel) ObjSave(irow IRow) int {
-	ti := this.getTableInfo()
-	columns := ti.Columns()
-	// columns := irow.Columns()
-	values := this.getRowValues(&columns, irow, true)
+func (this *BaseModel) ReadMulti(result []IRow, cond IRow) bool {
+	iConds := this.IRowToConds(cond)
+	return this.Select(iConds, nil, nil)
+}
 
-	iFields := NewFieldsWriteWithSlice(columns, values)
+func (this *BaseModel) Save(irow IRow) int {
+	iFields := this.IRowToFields(irow)
 	id := this.InsertOrUpdate(iFields)
 	return id
 }
 
-func (this *BaseModel) ObjRemove(irow IRow) int {
+func (this *BaseModel) SaveMulti(irows []IRow) int {
+	if len(irows) == 0 {
+		return 0
+	}
+	fields := this.IRowsToFieldsMI(irows)
+	if len(fields.Columns()) == 0 {
+		return 0
+	}
+	return this.MultiInsert(fields)
+}
+
+func (this *BaseModel) Remove(irow IRow) int {
 	ti := this.getTableInfo()
 	pks := ti.primaryKey
-	condVal := this.getRowValues(&pks, irow, false)
-	iConds := NewCondsWithSlice(pks, condVal)
+	partKey := this.PartitionKey()
+	pks = append(pks, partKey...)
+	condCol, condVal := this.getRowValues(irow, pks)
+	iConds := NewConds().InitWithSlice(condCol, condVal)
 	num := this.Delete(iConds)
 	return num
 }
 
-func (this *BaseModel) getRowValues(columns *[]string, irow IRow, trimNegligible bool) []interface{} {
-	negligible := map[string]bool{}
-	if trimNegligible {
-		ti := this.getTableInfo()
-		negColumns := ti.Negligible()
-		for _, clm := range negColumns {
-			negligible[clm] = true
-		}
+func (this *BaseModel) IRowToConds(irow IRow) *Condition {
+	if irow == nil {
+		return NewConds()
 	}
-	clms := []string{}
-	partKey := this.PartitionKey()
-	hasPartKey := false
-	// condMap := map[string]interface{}{}
-	values := []interface{}{}
-	for _, clm := range *columns {
-		if clm == partKey {
-			hasPartKey = true
+	columns := this.getAllColumns()
+	columns, values := this.getRowValues(irow, columns)
+	conds := NewConds().InitWithSlice(columns, values)
+	return conds
+}
+
+func (this *BaseModel) IRowToFields(irow IRow) *FieldsWrite {
+	if irow == nil {
+		return NewFieldsWrite()
+	}
+	columns := this.getAllColumns()
+	columns, values := this.getRowValues(irow, columns)
+	fields := NewFieldsWrite().InitWithSlice(columns, values)
+	return fields
+}
+
+func (this *BaseModel) IRowsToFieldsMI(irows []IRow) *FieldsMultiInsert {
+	columns := this.getAllColumns()
+	fields := NewFieldsMultiInsert()
+	for _, ir := range irows {
+		if ir == nil {
+			continue
 		}
+		cols, vals := this.getRowValues(ir, columns)
+		fields.AddSlice(vals, cols...)
+	}
+	return fields
+}
+
+/**
+ * 指定字段名slice获取字段值slice
+ */
+func (this *BaseModel) getRowValues(irow IRow, columns []string) (newColumns []string, values []interface{}) {
+	// negligible := map[string]bool{}
+	// if trimNegligible {
+	// 	ti := this.getTableInfo()
+	// 	negColumns := ti.Negligible()
+	// 	for _, clm := range negColumns {
+	// 		negligible[clm] = true
+	// 	}
+	// }
+	// newColumns := []string{}
+	for _, clm := range columns {
 		ifc := irow.Get(clm)
-		if trimNegligible && negligible[clm] {
-			val, _ := InterfaceToString(ifc)
-			if val == `0` || val == `` {
-				continue
-			}
+		val, _ := InterfaceToString(ifc)
+		if val == `0` || val == `` { //去除0值，因为OO式的db操作0值没有意义
+			continue
 		}
-		clms = append(clms, clm)
+		// if trimNegligible && negligible[clm] { //去除可忽略
+		// 	continue
+		// }
+		newColumns = append(newColumns, clm)
 		values = append(values, ifc)
 	}
-	if !hasPartKey && partKey != `` {
-		clms = append(clms, partKey)
-		values = append(values, irow.Get(partKey))
-	}
-	*columns = clms
-	return values
+	return
+}
+
+func (this *BaseModel) getAllColumns() []string {
+	ti := this.getTableInfo()
+	columns := ti.Columns()
+	partKey := this.PartitionKey()
+	return append(columns, partKey...)
 }
 
 func (this *BaseModel) LastSql() string {

@@ -34,6 +34,9 @@ func (this *ApdGroup) Add(fields ...string) {
 	this.fields = append(this.fields, fields...)
 }
 func (this *ApdGroup) GetSql() string {
+	if len(this.fields) == 0 {
+		return ``
+	}
 	return ` GROUP BY ` + "`" + strings.Join(this.fields, "`, `") + "`"
 }
 func (this *ApdGroup) Values() []interface{} {
@@ -41,19 +44,24 @@ func (this *ApdGroup) Values() []interface{} {
 }
 
 type ApdOrder struct {
-	fields map[string]direct
+	columns []string
+	ds      []direct
 }
 
 func (this *ApdOrder) Add(field string, d direct) {
 	if d == 0 {
 		d = ASC
 	}
-	this.fields[field] = d
+	this.columns = append(this.columns, field)
+	this.ds = append(this.ds, d)
 }
 func (this *ApdOrder) GetSql() string {
+	if len(this.columns) == 0 {
+		return ``
+	}
 	sql := ` ORDER BY `
-	for key, val := range this.fields {
-		sql += "`" + key + "` " + val.String() + `, `
+	for i, clm := range this.columns {
+		sql += "`" + clm + "` " + this.ds[i].String() + `, `
 	}
 	return sql[:len(sql)-2]
 }
@@ -68,6 +76,9 @@ type ApdLimit struct {
 }
 
 func (this *ApdLimit) GetSql() string {
+	if this.offset == 0 && this.num == 0 {
+		return ``
+	}
 	ofs := `?`
 	nm := `?`
 	if !this.prepare {
@@ -77,8 +88,19 @@ func (this *ApdLimit) GetSql() string {
 	return ` LIMIT ` + ofs + `, ` + nm
 }
 
+func (this *ApdLimit) Values() []interface{} {
+	if this.offset == 0 && this.num == 0 {
+		return []interface{}{}
+	}
+	return []interface{}{this.offset, this.num}
+}
+
 func NewAppends() *Appends {
-	return &Appends{prepare: true}
+	a := &Appends{prepare: true}
+	a.group = &ApdGroup{}
+	a.order = &ApdOrder{}
+	a.limit = &ApdLimit{prepare: a.prepare}
+	return a
 }
 
 type Appends struct {
@@ -89,32 +111,22 @@ type Appends struct {
 }
 
 func (this *Appends) GroupBy(fields ...string) *Appends {
-	if this.group == nil {
-		this.group = &ApdGroup{fields}
-	} else {
-		this.group.Add(fields...)
-	}
+	this.group.Add(fields...)
 	return this
 }
 func (this *Appends) OrderBy(field string, d direct) *Appends {
-	if this.order == nil {
-		this.order = &ApdOrder{}
-	}
 	this.order.Add(field, d)
 	return this
 }
 func (this *Appends) Limit(offset, num int) *Appends {
-	if this.limit == nil {
-		this.limit = &ApdLimit{offset, num, this.prepare}
-	} else {
-		this.limit.offset = offset
-		this.limit.num = num
-	}
+	this.limit.offset = offset
+	this.limit.num = num
+
 	return this
 }
 func (this *Appends) GetSql() string {
 	return this.group.GetSql() + this.order.GetSql() + this.limit.GetSql()
 }
 func (this *Appends) Values() []interface{} {
-	return []interface{}{this.limit.offset, this.limit.num}
+	return this.limit.Values()
 }

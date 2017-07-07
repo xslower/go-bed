@@ -6,7 +6,7 @@ import (
 )
 
 func assembleDsn(dbc map[string]string) string {
-	dsn := dbc[`user`] + `:` + dbc[`password`] + `@tcp(` + dbc[`host`] + `:` + dbc[`port`] + `)/` + dbc[`dbname`] + `?charset=utf8`
+	dsn := dbc[`username`] + `:` + dbc[`password`] + `@tcp(` + dbc[`host`] + `:` + dbc[`port`] + `)/` + dbc[`dbname`] + `?charset=utf8`
 	return dsn
 }
 

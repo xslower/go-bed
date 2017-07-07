@@ -25,44 +25,58 @@ type IFields interface {
  */
 func NewFieldsMultiInsert() *FieldsMultiInsert {
 	fi := &FieldsMultiInsert{prepare: true}
+	fi.colIndex = map[string]int{}
+	fi.columns = []string{}
 	fi.values = [][]interface{}{}
+
 	// fi.values[0] = make([]interface{}, 1)
-	return fi
-}
-func NewFieldsMultiInsertWithMap(fields map[string]interface{}) *FieldsMultiInsert {
-	fi := NewFieldsMultiInsert()
-	value := []interface{}{}
-	for clm, val := range fields {
-		fi.columns = append(fi.columns, clm)
-		value = append(value, val)
-	}
-	fi.values = append(fi.values, value)
-	return fi
-}
-func NewFieldsMultiInsertWithSlice(columns []string, values []interface{}) *FieldsMultiInsert {
-	fi := NewFieldsMultiInsert()
-	if len(columns) != len(values) {
-		panic(`given values number is not match columns number`)
-	}
-	fi.columns = columns
-	fi.values = append(fi.values, values)
 	return fi
 }
 
 type FieldsMultiInsert struct {
-	columns []string
-	values  [][]interface{} //用list目的是可以支持多条插入。
-	prepare bool
+	colIndex map[string]int
+	columns  []string
+	values   [][]interface{} //用list目的是可以支持多条插入。
+	prepare  bool
 }
 
-//增加一条记录
+func (this *FieldsMultiInsert) InitWithMap(fields map[string]interface{}) *FieldsMultiInsert {
+	value := []interface{}{}
+	for clm, val := range fields {
+		this.columns = append(this.columns, clm)
+		value = append(value, val)
+	}
+	this.values = append(this.values, value)
+	for i, clm := range this.columns {
+		this.colIndex[clm] = i
+	}
+	return this
+}
+
+func (this *FieldsMultiInsert) InitWithSlice(columns []string, values []interface{}) *FieldsMultiInsert {
+	if len(columns) != len(values) {
+		panic(`given values number is not match columns number`)
+	}
+	this.columns = columns
+	this.values = append(this.values, values)
+	for i, clm := range this.columns {
+		this.colIndex[clm] = i
+	}
+	return this
+}
+
+//增加一条记录。需要处理fields中字段数量跟现有字段数量不匹配的情况。
 func (this *FieldsMultiInsert) AddMap(fields map[string]interface{}) *FieldsMultiInsert {
 	num := len(this.columns)
 	if num == 0 {
-		num = len(fields)
-	} else if num != len(fields) {
-		panic(`given fields number is not match columns number`)
-
+		return this.InitWithMap(fields)
+	}
+	for clm, _ := range fields {
+		_, ok := this.colIndex[clm]
+		if !ok {
+			this.addColumn(clm)
+			num++
+		}
 	}
 	values := make([]interface{}, num)
 	for i, clm := range this.columns {
@@ -73,14 +87,39 @@ func (this *FieldsMultiInsert) AddMap(fields map[string]interface{}) *FieldsMult
 }
 
 //增加一条记录，
-func (this *FieldsMultiInsert) AddSlice(values []interface{}) *FieldsMultiInsert {
-	if len(values) != len(this.columns) {
-		panic(`given values number is not match columns number`)
+func (this *FieldsMultiInsert) AddSlice(values []interface{}, columns ...string) *FieldsMultiInsert {
+	num := len(this.columns)
+	if num == 0 {
+		return this.InitWithSlice(columns, values)
 	}
-	this.values = append(this.values, values)
+	if len(columns) == 0 {
+		if len(values) != num {
+			panic(`given [values]'s number is not match this.columns' number`)
+		}
+		this.values = append(this.values, values)
+		return this
+	}
+	if len(values) != len(columns) {
+		panic(`given [values]'s number is not match given [columns]'s number`)
+	}
+	for _, clm := range columns {
+		_, ok := this.colIndex[clm]
+		if !ok {
+			this.addColumn(clm)
+			num++
+		}
+	}
+	val := make([]interface{}, num)
+	for i, clm := range columns {
+		val[this.colIndex[clm]] = values[i]
+	}
+	this.values = append(this.values, val)
 	return this
 }
 func (this *FieldsMultiInsert) GetSql() string {
+	if len(this.columns) == 0 {
+		return ``
+	}
 	sql := `(` + strings.Join(this.columns, `, `) + `) VALUES `
 	if this.prepare {
 		quest := make([]string, len(this.columns))
@@ -106,8 +145,8 @@ func (this *FieldsMultiInsert) Values() []interface{} {
 	if len(this.values) == 1 {
 		return this.values[0]
 	}
-	ret := this.values[0]
-	for _, val := range this.values[1:] {
+	ret := []interface{}{}
+	for _, val := range this.values {
 		ret = append(ret, val...)
 	}
 	return ret
@@ -116,28 +155,30 @@ func (this *FieldsMultiInsert) Columns() []string {
 	return this.columns
 }
 func (this *FieldsMultiInsert) Get(key string) (value interface{}, exist bool) {
-	for i, clm := range this.columns {
-		if clm == key {
-			return this.values[0][i], true
-		}
+	index, ok := this.colIndex[key]
+	if !ok {
+		return nil, false
 	}
-	return nil, false
+	return this.values[0][index], true
 }
 func (this *FieldsMultiInsert) Del(key string) bool {
-	n := -1
-	for i, clm := range this.columns {
-		if clm == key {
-			this.columns = append(this.columns[:i], this.columns[i+1:]...)
-			n = i
-		}
-	}
-	if n == -1 {
+	index, ok := this.colIndex[key]
+	if !ok {
 		return false
 	}
+	delete(this.colIndex, key)
+	this.columns = append(this.columns[:index], this.columns[index+1:]...)
 	for i, val := range this.values {
-		this.values[i] = append(val[:n], val[n+1:]...)
+		this.values[i] = append(val[:index], val[index+1:]...)
 	}
 	return true
+}
+func (this *FieldsMultiInsert) addColumn(clm string) {
+	this.columns = append(this.columns, clm)
+	this.colIndex[clm] = len(this.columns) - 1
+	for i, _ := range this.values {
+		this.values[i] = append(this.values[i], ``)
+	}
 }
 
 /**
@@ -146,24 +187,6 @@ func (this *FieldsMultiInsert) Del(key string) bool {
 
 func NewFieldsWrite() *FieldsWrite {
 	return &FieldsWrite{prepare: true}
-}
-func NewFieldsWriteWithMap(fields map[string]interface{}) *FieldsWrite {
-	fu := NewFieldsWrite()
-	for key, val := range fields {
-		fu.fldList = append(fu.fldList, &Field{key, val, _VALTYPE_NORMAL})
-	}
-	return fu
-}
-func NewFieldsWriteWithSlice(columns []string, values []interface{}) *FieldsWrite {
-	fu := NewFieldsWrite()
-	if len(columns) == len(values) {
-		for i, clm := range columns {
-			fu.fldList = append(fu.fldList, &Field{clm, values[i], _VALTYPE_NORMAL})
-		}
-	} else {
-		panic(`given values number is not match columns number`)
-	}
-	return fu
 }
 
 type Field struct {
@@ -177,6 +200,24 @@ type FieldsWrite struct {
 	prepare bool
 }
 
+func (this *FieldsWrite) InitWithMap(fields map[string]interface{}) *FieldsWrite {
+	for key, val := range fields {
+		this.fldList = append(this.fldList, &Field{key, val, _VALTYPE_NORMAL})
+	}
+	return this
+}
+
+func (this *FieldsWrite) InitWithSlice(columns []string, values []interface{}) *FieldsWrite {
+	if len(columns) == len(values) {
+		for i, clm := range columns {
+			this.fldList = append(this.fldList, &Field{clm, values[i], _VALTYPE_NORMAL})
+		}
+	} else {
+		panic(`given values number is not match columns number`)
+	}
+	return this
+}
+
 func (this *FieldsWrite) Add(key string, value interface{}) *FieldsWrite {
 	this.fldList = append(this.fldList, &Field{key, value, _VALTYPE_NORMAL})
 	return this
@@ -187,6 +228,9 @@ func (this *FieldsWrite) AddSpl(key string, value interface{}, typ pSqlType) *Fi
 }
 func (this *FieldsWrite) GetSql() string {
 	sql := ``
+	if len(this.fldList) == 0 {
+		return sql
+	}
 	for _, fld := range this.fldList {
 		clm := fld.column
 		sql += "`" + clm + "` = "
@@ -270,4 +314,13 @@ func (this *FieldsRead) Get(key string) (value interface{}, exist bool) {
 		}
 	}
 	return nil, false
+}
+func (this *FieldsRead) Del(key string) bool {
+	for i, clm := range this.columns {
+		if clm == key {
+			this.columns = append(this.columns[:i], this.columns[i+1:]...)
+			return true
+		}
+	}
+	return false
 }
