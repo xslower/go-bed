@@ -4,7 +4,7 @@ var (
 	helper = `package {PACKAGE}
 
 import (
-	"greentea/utils"
+	"github.com/xslower/goutils/utils"
 )
 
 func throw(err error, msg ...string) {

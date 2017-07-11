@@ -1,7 +1,7 @@
 package orm
 
 import (
-	`database/sql`
+	"database/sql"
 	// `fmt`
 
 	_ "github.com/go-sql-driver/mysql"
@@ -9,10 +9,8 @@ import (
 )
 
 var (
-	gDbConn     IConn
-	gDbRegistry = make(map[string]func(config map[string]string) IConn, 1)
-	gDbType     = map[uint8]string{1: `tinyint`, 2: `smallint`, 3: `int`, 4: `bigint`, 5: `utinyint`, 6: `usmallint`, 7: `uint`, 8: `ubigint`, 9: `char`, 10: `varchar`, 11: `timestamp`, 12: `enum`}
-	gDbTypeR    = map[string]uint8{}
+	gDbType  = map[uint8]string{1: `tinyint`, 2: `smallint`, 3: `int`, 4: `bigint`, 5: `utinyint`, 6: `usmallint`, 7: `uint`, 8: `ubigint`, 9: `char`, 10: `varchar`, 11: `timestamp`, 12: `enum`}
+	gDbTypeR = map[string]uint8{}
 )
 
 func initVariable() {
@@ -54,9 +52,9 @@ func (this *Conn) Query(query string, args ...interface{}) (columns []string, rr
 	//var rrows []RawRow
 	columns, _ = rows.Columns()
 	num := len(columns)
+	ref := make([]interface{}, num)
 	for rows.Next() {
 		rr := make([][]byte, num)
-		ref := make([]interface{}, num)
 		for i, _ := range ref {
 			ref[i] = &rr[i]
 		}

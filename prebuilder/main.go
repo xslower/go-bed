@@ -1,11 +1,12 @@
 package main
 
 import (
-	`flag`
-	`fmt`
-	`greentea/prebuilder/builder`
-	`greentea/utils`
-	`os`
+	"flag"
+	"fmt"
+	"os"
+
+	"github.com/xslower/go-die/prebuilder/builder"
+	"github.com/xslower/goutils/utils"
 )
 
 var (
@@ -35,5 +36,5 @@ func main() {
 		}
 		builder.ParseFile(model)
 	}
-	builder.BuildHelper(dir, *pack_name)
+	// builder.BuildHelper(dir, *pack_name)
 }

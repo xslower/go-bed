@@ -1,19 +1,11 @@
 package builder
 
 import (
-	"greentea/utils"
+	"github.com/xslower/goutils/utils"
 )
 
-func throw(err error, msg ...string) {
+func throw(err error, msg ...interface{}) {
 	utils.Throw(err, msg...)
-}
-
-func check(err error, msg ...interface{}) {
-	utils.Check(err, msg...)
-}
-
-func logit(data ...interface{}) {
-	utils.Logit(data...)
 }
 
 func echo(i ...interface{}) {

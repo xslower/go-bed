@@ -3,13 +3,14 @@ package builder
 import (
 	// `bufio`
 	// `io`
-	`fmt`
-	`greentea/orm`
-	`io/ioutil`
-	`os`
-	`os/exec`
-	`regexp`
-	`strings`
+	"fmt"
+	"io/ioutil"
+	"os"
+	"os/exec"
+	"regexp"
+	"strings"
+
+	"github.com/xslower/go-die/orm"
 )
 
 var (

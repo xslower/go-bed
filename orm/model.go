@@ -1,10 +1,11 @@
 package orm
 
 import (
-	// `database/sql`
-	`reflect`
-	`strconv`
-	`strings`
+	"reflect"
+	"strconv"
+	"strings"
+
+	"github.com/xslower/go-die/orm/sql"
 )
 
 var (
@@ -46,6 +47,9 @@ type ColumnInfo struct {
 	timestamp bool //mean whether could skiped this column on insert
 }
 
+/**
+ * 注册model对象。通过model解析一些表+对象的信息
+ */
 func RegisterModel(model interface{}) {
 	val := reflect.ValueOf(model)
 
@@ -107,6 +111,9 @@ func RegisterModel(model interface{}) {
 	gModelRegistry[dbName+tableName] = tblInfo
 }
 
+/**
+ * 对应一个表
+ */
 type IModel interface {
 	DbName() string
 	TableName(elems ...ISqlElem) string
@@ -115,6 +122,9 @@ type IModel interface {
 	ResetResult()
 }
 
+/**
+ * 对应表中的一行，以及代码中的一个对象
+ */
 type IRow interface {
 	Set(key string, val []byte) error
 	Get(key string) interface{}

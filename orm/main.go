@@ -1,26 +1,36 @@
 package orm
 
-import ()
+import (
+	"github.com/xslower/go-die/orm/sql"
+	"github.com/xslower/goutils/utils"
+)
 
-func init() {
+var (
+	_conn_manager = &connManager{}
+	// fNewSqlBuilder =
+)
 
+func getConn(key string) (ic IConn) {
+	ic = _conn_manager.getConn(key)
+	return
 }
 
-func Start(dbCnf map[string]string) {
-	gDbRegistry[`mysql`] = NewMysqlConn
-	gSqlBuFnRegistry[`mysql`] = NewMysqlBuilder
-	driver, ok := dbCnf[`driver`]
-	if !ok { //default driver is mysql
-		driver = `mysql`
-	}
-	dbFunc, ok := gDbRegistry[driver]
-	if !ok {
-		panic(`Do not support driver: [` + driver + `] in db driver`)
-	}
-	gDbConn = dbFunc(dbCnf)
+func Init(cim map[string]*ConnInfo, km map[string]string) {
+	_conn_manager.start(cim, km)
+}
 
-	fNewSqlBuilder, ok = gSqlBuFnRegistry[driver]
-	if !ok {
-		panic(`Do not support driver: [` + driver + `] in sql builder`)
-	}
+func throw(err error, msg ...interface{}) {
+	utils.Throw(err, msg...)
+}
+
+func echo(i ...interface{}) {
+	utils.Echo(i...)
+}
+
+func echoStrSlice(strs ...[]string) {
+	utils.EchoStrSlice(strs...)
+}
+
+func echoBytes(args interface{}) {
+	utils.EchoBytes(args)
 }
