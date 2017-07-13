@@ -6,7 +6,7 @@ import (
 	"errors"
 	"strconv"
 	"strings"
-	"greentea/orm"
+	"github.com/xslower/go-die/orm"
 	"hash/crc32"
 )
 `
@@ -76,9 +76,13 @@ func (this *{ROW}) Columns() []string {
 }`
 
 	initDefine = `
-func ormStart(dbConfig map[string]string) {
-	orm.Start(dbConfig)
+func ormInit(file string) (err error) {
+	err = orm.InitWithFile(file)
+	if err != nil {
+		return
+	}
 	{MODEL}
+	return
 }
 
 func getPart(idx, part_num int) string {
@@ -95,6 +99,7 @@ func getPart(idx, part_num int) string {
 
 func packageHolder(){
 	_ = crc32.ChecksumIEEE([]byte("a"))
+	_ = strings.Join([]string{}, "")
 }
 `
 

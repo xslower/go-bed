@@ -4,8 +4,6 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-
-	"github.com/xslower/go-die/orm/sql"
 )
 
 var (
@@ -62,10 +60,11 @@ func RegisterModel(model interface{}) {
 	dnFunc := val.MethodByName(`DbName`)
 	dnv := dnFunc.Call([]reflect.Value{})
 	dbName := dnv[0].String()
-	if gDbConn == nil {
-		panic(`You must trigger orm.Start() before orm.RegisterModel()!`)
+	conn := getConn(``)
+	if conn == nil {
+		panic(`You must trigger orm.Init() before orm.RegisterModel()!`)
 	}
-	_, rrows := gDbConn.Query(ShowColumns(dbName, tableName))
+	_, rrows := conn.Query(ShowColumns(dbName, tableName))
 	tblInfo := &TableInfo{dbName: dbName, tableName: tableName}
 	for _, rr := range rrows {
 		colInfo := &ColumnInfo{}
@@ -152,12 +151,14 @@ func (this *BaseModel) Insert(fields IFields) int {
 	if fields == nil {
 		panic(`fields is nil, expect IFields`)
 	}
-	sb := fNewSqlBuilder(this.DbName(), this.TableName(fields))
+	tbn := this.TableName(fields)
+	sb := NewSqlBuilder(this.DbName(), tbn)
+	conn := getConn(tbn)
 	this.filterColumn(fields)
 	sql := sb.Insert(fields)
 	values := fields.Values()
 	this.lastSql = sql
-	id := gDbConn.Exec(sql, values...)
+	id := conn.Exec(sql, values...)
 	return id
 }
 
@@ -165,13 +166,15 @@ func (this *BaseModel) InsertOrUpdate(fields IFields) int {
 	if fields == nil {
 		panic(`fields is nil, expect IFields`)
 	}
-	sb := fNewSqlBuilder(this.DbName(), this.TableName(fields))
+	tbn := this.TableName(fields)
+	sb := NewSqlBuilder(this.DbName(), tbn)
+	conn := getConn(tbn)
 	this.filterColumn(fields)
 	sql := sb.InsertOrUpdate(fields)
 	values := fields.Values()
 	values = append(values, values...) //这里insert和update需要两套值
 	this.lastSql = sql
-	id := gDbConn.Exec(sql, values...)
+	id := conn.Exec(sql, values...)
 	return id
 }
 
@@ -179,12 +182,13 @@ func (this *BaseModel) MultiInsert(fields IFields) int {
 	if fields == nil {
 		panic(`fields is nil, expect IFields`)
 	}
-	sb := fNewSqlBuilder(this.DbName(), this.TableName(fields))
-	// this.filterColumn(fields)
+	tbn := this.TableName(fields)
+	sb := NewSqlBuilder(this.DbName(), tbn)
+	conn := getConn(tbn)
 	sql := sb.MultiInsert(fields)
 	values := fields.Values()
 	this.lastSql = sql
-	id := gDbConn.Exec(sql, values...)
+	id := conn.Exec(sql, values...)
 	return id
 }
 
@@ -192,7 +196,9 @@ func (this *BaseModel) Delete(condition ICondition) int {
 	if condition == nil {
 		panic(`condition is nil, expect ICondition`)
 	}
-	sb := fNewSqlBuilder(this.DbName(), this.TableName(condition))
+	tbn := this.TableName(condition)
+	sb := NewSqlBuilder(this.DbName(), tbn)
+	conn := getConn(tbn)
 	this.filterColumn(condition)
 	if len(condition.Columns()) == 0 {
 		panic(`do not allow update table without any condition!`)
@@ -200,7 +206,7 @@ func (this *BaseModel) Delete(condition ICondition) int {
 	sql := sb.Delete(condition)
 	values := condition.Values()
 	this.lastSql = sql
-	num := gDbConn.Exec(sql, values...)
+	num := conn.Exec(sql, values...)
 	return num
 }
 
@@ -211,7 +217,9 @@ func (this *BaseModel) Update(fields IFields, condition ICondition) int {
 	if condition == nil { //patch update table is a dangerous action
 		panic(`condition is nil, expect ICondition`)
 	}
-	sb := fNewSqlBuilder(this.DbName(), this.TableName(condition))
+	tbn := this.TableName(condition)
+	sb := NewSqlBuilder(this.DbName(), tbn)
+	conn := getConn(tbn)
 	this.filterColumn(fields)
 	this.filterColumn(condition)
 	if len(condition.Columns()) == 0 {
@@ -222,7 +230,7 @@ func (this *BaseModel) Update(fields IFields, condition ICondition) int {
 	// echo(condition.Values())
 	values := append(fields.Values(), condition.Values()...)
 	this.lastSql = sql
-	num := gDbConn.Exec(sql, values...)
+	num := conn.Exec(sql, values...)
 	return num
 }
 
@@ -236,14 +244,16 @@ func (this *BaseModel) Select(condition ICondition, appends IAppends, fields IFi
 	if fields == nil {
 		fields = NewFieldsRead()
 	}
-	sb := fNewSqlBuilder(this.DbName(), this.TableName(condition))
+	tbn := this.TableName(condition)
+	sb := NewSqlBuilder(this.DbName(), tbn)
+	conn := getConn(tbn)
 	this.filterColumn(fields)
 	this.filterColumn(condition)
 	sql := sb.Select(fields, condition, appends)
 	// values := append(fields.Values(), condition.Values()...)
 	values := append(condition.Values(), appends.Values()...)
 	this.lastSql = sql
-	columns, rrows := gDbConn.Query(sql, values...)
+	columns, rrows := conn.Query(sql, values...)
 	this.IModel.ResetResult()
 	// irowSlice := []IRow{}
 	for _, rr := range rrows {
@@ -261,13 +271,15 @@ func (this *BaseModel) Read(irow IRow) bool {
 		return false
 	}
 	iConds := this.IRowToConds(irow)
-	sb := fNewSqlBuilder(this.DbName(), this.TableName(iConds))
+	tbn := this.TableName(iConds)
+	sb := NewSqlBuilder(this.DbName(), tbn)
+	conn := getConn(tbn)
 	this.filterColumn(iConds) //有些model中的分表字段可能不在表中
 	iApds := NewAppends().Limit(0, 1)
 	values := append(iConds.Values(), iApds.Values()...)
 	sql := sb.Select(nil, iConds, iApds)
 	this.lastSql = sql
-	columns, rrows := gDbConn.Query(sql, values...)
+	columns, rrows := conn.Query(sql, values...)
 	if len(rrows) > 0 {
 		for i, clm := range columns {
 			irow.Set(clm, rrows[0][i])

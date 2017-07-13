@@ -1,0 +1,10 @@
+{
+	"01":{
+		"host":"rm-uf6tz1g9l077nkd0do.mysql.rds.aliyuncs.com",
+		"user":"rdsroot",
+		"pass":"yinnuo123!@#",
+		"dbname":"test"
+	}
+	
+}
+

@@ -1,7 +1,6 @@
 package orm
 
 import (
-	"github.com/xslower/go-die/orm/sql"
 	"github.com/xslower/goutils/utils"
 )
 
@@ -15,8 +14,15 @@ func getConn(key string) (ic IConn) {
 	return
 }
 
-func Init(cim map[string]*ConnInfo, km map[string]string) {
-	_conn_manager.start(cim, km)
+//使用配置文件初始化orm
+func InitWithFile(file string) (err error) {
+	err = _conn_manager.startWithFile(file)
+	return
+}
+
+func Init(cim ConnConfig, km map[string]string) (err error) {
+	err = _conn_manager.start(cim, km)
+	return
 }
 
 func throw(err error, msg ...interface{}) {

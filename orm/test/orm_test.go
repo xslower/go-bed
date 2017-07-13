@@ -1,10 +1,11 @@
 package test
 
 import (
-	`github.com/astaxie/beego/config`
-	`greentea/orm`
-	`strconv`
+	// "io/ioutil"
+	"strconv"
 	"testing"
+
+	"github.com/xslower/go-die/orm"
 )
 
 var (
@@ -13,11 +14,11 @@ var (
 )
 
 func init() {
-	cnf, err := config.NewConfig(`ini`, `config.ini`)
-	throw(err)
-	dbCnf, err := cnf.GetSection(`database.147`)
-	throw(err)
-	ormStart(dbCnf)
+	err := ormInit(`config.json`)
+	if err != nil {
+		echo(err)
+		return
+	}
 	gMTest = NewMytestModel()
 }
 

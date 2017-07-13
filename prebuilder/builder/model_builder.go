@@ -27,11 +27,15 @@ var (
 
 func init() {
 	// ptnAll := `[.\s` + "\n\r" + `]*`
+	// 识别struct块的正则，同时识别出db名和表名
 	regxStt = regexp.MustCompile("\n(?://@db (.*)\n)?(?://@table (.*)\n)?" + `type\s*([^\s]*)\s*struct\s*{(?s)([^\}]*)}`)
+	// 识别struct字段的正则
 	regxFld = regexp.MustCompile("\n\t([^\\s]+)\\s+([^\\s]+)(\\s*[`\"](.*)[`\"])?")
+	// 识别包名的正则
 	regxPkg = regexp.MustCompile(`package ([^\s]*)`)
 	// regxDb = regexp.MustCompile(`@db ([^\s]*)`)
 	// regxTblBlk = regexp.MustCompile(`@table ([^\s]*)`)
+	// 识别分表类型的正则
 	regxTblDef = regexp.MustCompile(`T(\d*):(.+)`)
 	registerModel = ``
 }
@@ -43,11 +47,7 @@ func ParseHeader(fileHeader string) {
 
 func ParseFile(file string) {
 	content, _ := ioutil.ReadFile(file)
-	// echo(string(content))
 	sttDef := regxStt.FindAllStringSubmatch(string(content), -1)
-	// echoStrSlice(sttDef...)
-	// sttBody := []string{}
-	// return
 	sttNum := len(sttDef)
 	if sttNum < 1 {
 		fmt.Println(`There is no struct definition in the file:` + file)
@@ -132,7 +132,7 @@ func AssembleModel(sttName, dbDef, tblDef string) {
 	if len(tblDef) > 1 {
 		tblCode, partKey = ParseTableDef(tblDef)
 	} else { //did not find the table name define
-		tblCode = orm.ToUnderline(sttRowName)
+		tblCode = `return "` + orm.ToUnderline(sttRowName) + `"`
 	}
 	modelCode := subModelDefine
 	modelCode = strings.Replace(modelCode, `{MODEL}`, sttModelName, -1)

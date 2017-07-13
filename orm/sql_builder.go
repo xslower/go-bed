@@ -1,12 +1,16 @@
 /**
 * sql builder for mysql
  */
-package sql
+package orm
 
 import (
 	"strings"
 
 	"github.com/xslower/goutils/utils"
+)
+
+var (
+	NewSqlBuilder = NewMysqlBuilder
 )
 
 type ISqlElem interface {
